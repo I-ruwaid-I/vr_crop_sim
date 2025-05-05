@@ -1,0 +1,23 @@
+from rest_framework import serializers
+
+class CropPredictionSerializer(serializers.Serializer):
+    moisture = serializers.FloatField(required=False, default=0.0)
+    temperature = serializers.FloatField(required=False, default=0.0)
+    sunlight = serializers.FloatField(required=False, default=0.0)
+    humidity = serializers.FloatField(required=False, default=0.0)
+    rainfall = serializers.FloatField(required=False, default=0.0)
+    soil_ph = serializers.FloatField(required=False, default=0.0)
+    soil_type = serializers.CharField(max_length=50)
+    crop_type = serializers.CharField(max_length=50)
+    growth_stage = serializers.CharField(max_length=50, required=False, default='Seedling')
+    planting_date = serializers.CharField(max_length=50)
+    biomass = serializers.FloatField(required=False, default=0.0)
+    leaf_area_index = serializers.FloatField(required=False, default=0.0)
+    N = serializers.FloatField(required=False, default=0.0)
+    P = serializers.FloatField(required=False, default=0.0)
+    K = serializers.FloatField(required=False, default=0.0)
+    wind_speed = serializers.FloatField(required=False, default=0.0)
+    Temperature = serializers.FloatField(required=False, default=0.0)
+    Humidity = serializers.FloatField(required=False, default=0.0)
+    Wind_Speed = serializers.FloatField(required=False, default=0.0)
+    Soil_pH = serializers.FloatField(required=False, default=0.0)
