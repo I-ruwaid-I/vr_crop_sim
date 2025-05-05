@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background-color: black;
+        }
+        #vr-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #joystick {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            touch-action: none;
+            display: none;
+        }
+        #joystick-knob {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            position: absolute;
+            top: 30px;
+            left: 30px;
+        }
+        #error-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: red;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div id="error-overlay"></div>
+<div id="vr-container">
+    <div id="joystick"><div id="joystick-knob"></div></div>
+</div>
+
+<script>
+    console.log("vr_crop.html loaded");
+
+    // Error overlay
+    function showError(message) {
+        const overlay = document.getElementById("error-overlay");
+        overlay.style.display = "block";
+        overlay.innerText = message;
+        console.error(message);
+    }
+
+    // Three.js setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.8, 3);
+    camera.rotation.order = 'YXZ';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.getElementById("vr-container").appendChild(renderer.domElement);
+
+    // WebGL debug
+    const gl = renderer.getContext();
+    if (gl) {
+        console.log("WebGL context: Initialized", gl.getParameter(gl.VERSION));
+    } else {
+        showError("WebGL context failed to initialize");
+    }
+
+    // Resize handler
+    window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Texture loader
+    const textureLoader = new THREE.TextureLoader();
+    const trunkTexture = textureLoader.load(
+        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/roughness.jpg",
+        () => console.log("Trunk texture loaded"),
+        undefined,
+        (err) => showError("Failed to load trunk texture: " + err.message)
+    );
+    const foliageTexture = textureLoader.load(
+        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/terrain/grasslight-big.jpg",
+        () => console.log("Foliage texture loaded"),
+        undefined,
+        (err) => showError("Failed to load foliage texture: " + err.message)
+    );
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    directionalLight.position.set(-3, 5, 1);
+    scene.add(directionalLight);
+
+    // Skybox
+    const skyGeometry = new THREE.SphereBufferGeometry(50, 16, 16);
+    const skyMaterial = new THREE.MeshBasicMaterial({ color: 0x87CEEB, side: THREE.BackSide });
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+    scene.add(sky);
+
+    // Ground
+    const groundGeometry = new THREE.PlaneBufferGeometry(30, 30);
+    const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x00FF00, side: THREE.DoubleSide });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    // Crops (Trees)
+    const cropGroup = new THREE.Group();
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8B4513,
+        roughnessMap: trunkTexture,
+        roughness: 0.8,
+        metalness: 0.2
+    });
+    const foliageMaterial = new THREE.MeshStandardMaterial({
+        color: 0x00FF00,
+        map: foliageTexture,
+        roughness: 0.9,
+        metalness: 0.1
+    });
+    const crops = [];
+
+    for (let i = 0; i < 4; i++) {
+        const crop = new THREE.Group();
+        const trunkGeometry = new THREE.CylinderBufferGeometry(0.15, 0.25, 4, 8);
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.y = 1.5;
+        crop.add(trunk);
+        const foliageGeometry = new THREE.ConeBufferGeometry(1.2, 2.5, 8);
+        const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+        foliage.position.y = 4.5;
+        crop.add(foliage);
+        const crownGeometry = new THREE.SphereBufferGeometry(0.8, 8, 8);
+        const crown = new THREE.Mesh(crownGeometry, foliageMaterial);
+        crown.position.y = 3.5;
+        crop.add(crown);
+        // Randomize for natural look
+        const scaleVar = 0.9 + Math.random() * 0.2;
+        crop.scale.set(scaleVar, scaleVar, scaleVar);
+        crop.rotation.y = THREE.MathUtils.degToRad(Math.random() * 30 - 15);
+        cropGroup.add(crop);
+        crops.push(crop);
+    }
+    crops[0].position.set(-1.5, 0, -4);
+    crops[1].position.set(1.5, 0, -4);
+    crops[2].position.set(-3, 0, -3);
+    crops[3].position.set(3, 0, -3);
+    scene.add(cropGroup);
+
+    // Camera controls
+    let yaw = 0, pitch = 0;
+    let moveForward = 0, moveRight = 0;
+    const speed = 0.05;
+
+    // Joystick
+    const joystick = document.getElementById("joystick");
+    const knob = document.getElementById("joystick-knob");
+    let joystickActive = false;
+    let joystickOrigin = { x: 0, y: 0 };
+
+    joystick.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        joystick.style.display = "block";
+        joystickActive = true;
+        const touch = e.touches[0];
+        joystickOrigin = { x: touch.clientX, y: touch.clientY };
+        console.log("Joystick touch started at:", joystickOrigin);
+    });
+
+    joystick.addEventListener("touchmove", (e) => {
+        if (!joystickActive) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - joystickOrigin.x;
+        const deltaY = touch.clientY - joystickOrigin.y;
+        const maxDist = 30;
+        const dist = Math.min(Math.sqrt(deltaX * deltaX + deltaY * deltaY), maxDist);
+        const angle = Math.atan2(deltaY, deltaX);
+        const moveX = (dist / maxDist) * Math.cos(angle);
+        const moveY = (dist / maxDist) * Math.sin(angle);
+        knob.style.transform = `translate(${moveX * maxDist}px, ${moveY * maxDist}px)`;
+        moveForward = -moveY;
+        moveRight = moveX;
+        console.log("Joystick move: deltaX=", deltaX, "deltaY=", deltaY);
+    });
+
+    joystick.addEventListener("touchend", () => {
+        joystickActive = false;
+        knob.style.transform = "translate(0, 0)";
+        joystick.style.display = "none";
+        moveForward = 0;
+        moveRight = 0;
+        console.log("Joystick touch ended");
+    });
+
+    // Touch rotation
+    let lastTouchX = null, lastTouchY = null;
+    document.addEventListener("touchstart", (e) => {
+        if (e.touches.length === 1 && !joystickActive) {
+            lastTouchX = e.touches[0].clientX;
+            lastTouchY = e.touches[0].clientY;
+            console.log("Rotation touch started at:", lastTouchX, lastTouchY);
+        }
+    });
+
+    document.addEventListener("touchmove", (e) => {
+        if (e.touches.length === 1 && !joystickActive) {
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            const deltaX = touchX - lastTouchX;
+            const deltaY = touchY - lastTouchY;
+            yaw -= deltaX * 0.1;
+            pitch = Math.max(-90, Math.min(90, pitch - deltaY * 0.1));
+            lastTouchX = touchX;
+            lastTouchY = touchY;
+            console.log("Rotation touch moved, yaw=", yaw, "pitch=", pitch);
+        }
+    });
+
+    document.addEventListener("touchend", () => {
+        if (!joystickActive) {
+            lastTouchX = null;
+            lastTouchY = null;
+            console.log("Rotation touch ended");
+        }
+    });
+
+    // Device orientation
+    window.addEventListener("deviceorientation", (e) => {
+        if (e.alpha !== null) {
+            const alpha = THREE.MathUtils.degToRad(e.alpha || 0);
+            const beta = THREE.MathUtils.degToRad(e.beta || 0);
+            yaw = -alpha;
+            pitch = THREE.MathUtils.clamp(beta - Math.PI / 2, -Math.PI / 2, Math.PI / 2);
+            console.log("Device orientation: alpha=", e.alpha, "beta=", e.beta);
+        }
+    }, true);
+
+    // Keyboard controls
+    const keys = {};
+    document.addEventListener("keydown", (e) => {
+        keys[e.code] = true;
+        console.log("Key down:", e.code);
+    });
+    document.addEventListener("keyup", (e) => {
+        keys[e.code] = false;
+        console.log("Key up:", e.code);
+    });
+
+    // Animation loop
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // Keyboard input
+        moveForward = 0;
+        moveRight = 0;
+        if (keys["KeyW"]) moveForward = 1;
+        if (keys["KeyS"]) moveForward = -1;
+        if (keys["KeyA"]) moveRight = -1;
+        if (keys["KeyD"]) moveRight = 1;
+
+        // Update camera
+        camera.rotation.y = THREE.MathUtils.degToRad(yaw);
+        camera.rotation.x = THREE.MathUtils.degToRad(pitch);
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        camera.position.addScaledVector(forward, moveForward * speed);
+        camera.position.addScaledVector(right, moveRight * speed);
+
+        // Render
+        try {
+            renderer.render(scene, camera);
+        } catch (e) {
+            showError("Render error: " + e.message);
+        }
+    }
+    animate();
+
+    // PostMessage handler
+    window.addEventListener("message", function (event) {
+        console.log("Raw message event:", event);
+        console.log("Raw event.data:", event.data);
+        try {
+            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            console.log("Parsed data:", data);
+
+            console.log("Ground position:", ground.position);
+            console.log("Camera position:", camera.position);
+
+            const stage = (data.growth_stage || "").toLowerCase();
+            let scaleMultiplier = 0.5;
+            let yOffset = 0;
+            let rotationAngle = 0;
+            if (stage.includes("seedling")) {
+                scaleMultiplier = 0.3;
+                yOffset = 0.2;
+                rotationAngle = 5;
+            } else if (stage.includes("vegetative")) {
+                scaleMultiplier = 0.5;
+                yOffset = 0.5;
+                rotationAngle = 10;
+            } else if (stage.includes("reproductive")) {
+                scaleMultiplier = 0.7;
+                yOffset = 0.8;
+                rotationAngle = 15;
+            } else if (stage.includes("maturity")) {
+                scaleMultiplier = 0.9;
+                yOffset = 1.0;
+                rotationAngle = 20;
+            }
+            console.log("Growth stage:", stage, "Scale multiplier:", scaleMultiplier, "Y-offset:", yOffset, "Rotation angle:", rotationAngle);
+
+            const predictedYield = parseFloat(data.predicted_yield || 0);
+            const yieldScaler = Math.min(1 + (predictedYield / 5000), 1.5);
+            console.log("Predicted yield:", predictedYield, "Yield scaler:", yieldScaler);
+
+            const moisture = parseFloat(data.moisture || 0);
+            const temperature = parseFloat(data.Temperature || 0);
+            const N = parseFloat(data.N || 0);
+            const P = parseFloat(data.P || 0);
+            const K = parseFloat(data.K || 0);
+            let foliageColor = 0x00FF00;
+            if (moisture < 30 || temperature > 40 || N < 0.2 || P < 0.3 || K < 0.3) {
+                foliageColor = 0xA0522D;
+            }
+            console.log("Foliage color:", foliageColor.toString(16), "Moisture:", moisture, "Temperature:", temperature);
+
+            const windSpeed = parseFloat(data.Wind_Speed || 0);
+            const windTilt = Math.min(windSpeed / 10, 15);
+            console.log("Wind speed:", windSpeed, "Wind tilt:", windTilt);
+
+            const spacing = parseFloat(data.spacing || 1);
+            const positions = [
+                [-spacing, yOffset, -4],
+                [spacing, yOffset, -4],
+                [-2 * spacing, yOffset, -3],
+                [2 * spacing, yOffset, -3],
+            ];
+            console.log("Spacing value:", spacing, "Positions:", positions);
+
+            crops.forEach((crop, index) => {
+                const newScale = scaleMultiplier * yieldScaler;
+                crop.scale.set(newScale, newScale, newScale);
+                crop.children[1].material.color.set(foliageColor);
+                crop.children[2].material.color.set(foliageColor);
+                crop.position.set(...positions[index]);
+                const totalRotation = THREE.MathUtils.degToRad(rotationAngle + windTilt);
+                crop.rotation.set(totalRotation, crop.rotation.y, 0);
+                console.log(`Updated crop${index + 1}: scale=${newScale}, color=${foliageColor.toString(16)}, position=${positions[index]}, rotation=${THREE.MathUtils.radToDeg(totalRotation)} ${THREE.MathUtils.radToDeg(crop.rotation.y)} 0`);
+            });
+
+            const sunlight = parseFloat(data.sunlight || 0);
+            const rainfall = parseFloat(data.rainfall || 0);
+            let skyColor = 0x87CEEB;
+            if (rainfall > 50) skyColor = 0x778899;
+            else if (sunlight > 10) skyColor = 0x87CEEB;
+            else skyColor = 0x708090;
+            sky.material.color.set(skyColor);
+            console.log("Sky color:", skyColor.toString(16), "Sunlight:", sunlight, "Rainfall:", rainfall);
+        } catch (e) {
+            showError("Error processing message: " + e.message);
+        }
+    });
+
+    // Simulate message after 5 seconds
+    setTimeout(() => {
+        console.log("Simulating message");
+        const testData = {
+            growth_stage: "Vegetative",
+            predicted_yield: 2608.886636,
+            moisture: 20,
+            Temperature: 39,
+            sunlight: 1,
+            rainfall: 12,
+            Soil_pH: 7.8,
+            N: 0.32,
+            P: 0.52,
+            K: 0.41,
+            Wind_Speed: 30,
+            spacing: 1.5
+        };
+        window.postMessage(JSON.stringify(testData), "*");
+    }, 5000);
+</script>
+</body>
+</html>
